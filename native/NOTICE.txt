@@ -1,0 +1,9 @@
+The files src/vendor/{value,fastlz,gcpf,variant}.rs are copied from
+Glumbosch/miracledraft_map_helper, commit 82f49d03a4c5f38c371fdba95eaf320105cdf510,
+retrieved 2026-10-31. They are available under the Unlicense; see
+THIRD_PARTY_LICENSE. The local wrapper and minimal error module are new.
+https://github.com/Glumbosch/miracledraft_map_helper
+
+This is an unofficial experimental map-file editor, not endorsed by Wonderdraft.
+Use only trusted local map files. Outputs are new files; existing files are never
+replaced. File publishing requires a filesystem supporting hard links (e.g. NTFS).

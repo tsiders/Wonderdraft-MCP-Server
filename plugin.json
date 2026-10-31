@@ -1,0 +1,8 @@
+{
+  "$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name":"wonderdraft-mcp",
+  "version":"0.1.0",
+  "description":"Local Wonderdraft native map editing and live desktop control through trusted Codex Computer Use.",
+  "author":{"name":"Tyler"},
+  "extensions":{"com.openai":{"interface":{"displayName":"Wonderdraft MCP","shortDescription":"Wonderdraft maps and controls","longDescription":"Inspect native maps, add and rename labels in saved copies, and control the live Wonderdraft app with screenshots and verified inputs. Live control requires an active trusted Codex Computer Use bridge.","developerName":"Tyler","category":"Productivity","capabilities":["Interactive"]}}}
+}
