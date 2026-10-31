@@ -1,110 +1,117 @@
----
-type: documentation
-created: 2026-10-31
-updated: 2026-10-31
-project: "[[Wonderdraft MCP Server]]"
-tags:
-  - type/documentation
----
+# Wonderdraft MCP Server
 
-# Wonderdraft MCP Server Setup
+A Windows local MCP server for inspecting and editing Wonderdraft map files and controlling the live Wonderdraft application.
 
-A Windows local stdio MCP prototype with 15 tools. Native map tools run independently. Live tools use the installed Codex Computer Use runtime through an explicit trusted Node REPL bridge.
+Native file tools run independently. Live control requires an active Codex desktop Computer Use session and a trusted Node REPL bridge.
 
-## Implemented
+## Features
 
-- Native: list allowed map directories, inspect map metadata, list labels, rename an existing label, add a label by cloning an existing label's style.
-- Live: list Wonderdraft windows, activate and observe the app, click coordinates or accessibility elements, drag straight strokes, scroll, send restricted key chords, type into a verified focus, and set an observed editable element value.
-- Native output is always a new file. Existing output filenames are rejected. Original files remain unchanged.
-- Live operations require a fresh single-use observation token; they return updated screenshots and focus information.
+- Inspect map metadata and list labels.
+- Add labels using an existing label's style or rename existing labels.
+- Save native edits to a new file; existing outputs are never overwritten.
+- Observe the live app, click coordinates or accessibility elements, drag, scroll, send restricted key chords, and enter text.
+- Require fresh, single-use observation tokens for live actions and return refreshed app state.
 
-## Installed Location
+## Requirements
 
-`D:\repos\Wonderdraft MCP Server`
+- Windows and Wonderdraft.
+- Node.js and npm.
+- The Windows native backend in `bin/wonderdraft-native.exe`, or Rust to build it from source.
+- For live control: Codex desktop with Computer Use and its trusted Node REPL available.
 
-The global Codex MCP entry is named `wonderdraft`. It launches `server/index.mjs` using an absolute Node executable path. Registration is verified with `codex mcp get wonderdraft`. This does not establish that the current chat has refreshed its tool catalog.
+## Setup
 
-Native default map roots:
-
-- `%APPDATA%\Wonderdraft\maps`
-- This package's `maps` directory
-
-Set `WONDERDRAFT_MAP_ROOTS` to a JSON array of existing absolute directories to change them. `WONDERDRAFT_NATIVE` can override the native executable path. Do not point native tools at a currently open map and overwrite it through other software; save a new file, then deliberately open the new file in Wonderdraft.
-
-## Start or Rebuild
-
-Requirements: Node.js, installed npm dependencies, and the included Windows native executable. Rust is needed only to rebuild the native backend.
+Run these commands from the repository directory:
 
 ```powershell
 npm ci --ignore-scripts
-npm start
 ```
 
-Run commands in the package directory. `npm start` speaks MCP JSON-RPC on stdin/stdout; it is not an interactive terminal UI.
-
-Rebuild the native executable:
+To build or rebuild the native backend:
 
 ```powershell
 cargo build --release --manifest-path native/Cargo.toml
 Copy-Item -LiteralPath native/target/release/wonderdraft-native.exe -Destination bin/wonderdraft-native.exe
 ```
 
-## Attach Live Control
+Configure your MCP client to launch `node` with the absolute path to `server/index.mjs`. For example:
 
-Read `skills/wonderdraft/SKILL.md` and the installed computer-use skill before live app interaction. Initialize `sky` in the trusted Codex Node REPL as that skill directs, then:
+```json
+{
+  "mcpServers": {
+    "wonderdraft": {
+      "command": "node",
+      "args": ["C:/path/to/wonderdraft-mcp/server/index.mjs"]
+    }
+  }
+}
+```
+
+Use the configuration format required by your client. The included `mcp.json` supplies a plugin-relative configuration.
+
+`npm start` launches the stdio MCP server. It communicates over stdin/stdout rather than presenting an interactive terminal interface.
+
+### Map directories
+
+Native tools allow access to these directories by default:
+
+- `%APPDATA%\Wonderdraft\maps`
+- The repository's `maps` directory
+
+Set `WONDERDRAFT_MAP_ROOTS` to a JSON array of existing absolute directories to override them. Set `WONDERDRAFT_NATIVE` to override the native executable path.
+
+Native edits create a separate map file. Open that copy in Wonderdraft to verify the result before relying on it.
+
+## Live control
+
+Read [the Wonderdraft workflow](skills/wonderdraft/SKILL.md) and the installed Computer Use skill before interacting with the app.
+
+Initialize the real `sky` object in the trusted Codex Node REPL according to the Computer Use skill. Then import `server/bridge.mjs` using the absolute file URL for your checkout:
 
 ```javascript
+// Replace this example URL with your checkout location.
 globalThis.wdBridge = await (
-  await import('file:///D:/repos/Wonderdraft%20MCP%20Server/server/bridge.mjs')
+  await import('file:///C:/path/to/wonderdraft-mcp/server/bridge.mjs')
 ).startBridge(sky);
 ```
 
-For each live tool call, concurrently await that MCP tool and a trusted Node REPL call running:
+For each live tool request, concurrently dispatch that MCP call and a trusted Node REPL call running:
 
 ```javascript
 await wdBridge.pump({maxRequests: 1, timeoutMs: 10000});
 ```
 
-Both calls must be dispatched together, for example using `functions.exec` with `Promise.all` over the two tool calls. A live MCP call alone waits for the pump. Keep actions sequential, observe before choosing an input, and inspect refreshed state after each action.
+The live request waits for the pump. Keep actions sequential: observe the app, inspect its screenshot and accessibility tree, choose an action, and inspect the refreshed state.
 
-The bridge binds only to loopback on an ephemeral port and requires a per-session random bearer credential. The credential is stored under `.runtime/`, excluded from version control; do not publish it or store it in the vault. Close with `await wdBridge.close()`. Reattach after a REPL reset or chat change. Do not reuse a background pump outside an active trusted execution context.
+The bridge requires an active trusted execution context to preserve the host's Computer Use approval flow. A standalone MCP process cannot supply that context. Do not run a background pump outside an active trusted REPL call.
 
-Why this exists: standalone Sky app access reported `Computer Use requires app approval but elicitations are unavailable`. The trusted bridge preserves the actual host approval flow. It does not bypass it.
+The bridge binds to loopback on an ephemeral port. Its per-session credential is stored in the Git-ignored `.runtime/` directory. Do not publish this directory. Close the bridge with `await wdBridge.close()` and reattach after a REPL reset or session change.
 
-## Verification
-
-Verified against installed Wonderdraft 1.1.8.2 on 2026-10-31:
-
-- Three Node tests passed: token replay and coordinate/key restrictions, plus a real stdio MCP discovery/native file-edit round trip.
-- Four native Rust tests passed, including decoded whole-map byte preservation after reversing a label edit, Unicode labels, add-label coordinates, and refused overwrite.
-- The official sample map was read successfully; source file SHA-256 remained unchanged after edits.
-- An MCP-created map with an additional label opened and rendered in Wonderdraft.
-- A real stdio MCP client verified live window discovery, screenshot observation, and a harmless Escape input through the trusted bridge.
-- npm production dependency audit reported zero vulnerabilities after dependency updates.
+## Tests
 
 ```powershell
 npm test
 cargo test --release --manifest-path native/Cargo.toml
 ```
 
-The real-map integration test expects the official sample at `native/tests/treasure.wonderdraft_map` and skips if unavailable. It creates a new proof map in `maps/`. The explicit `tests/live-smoke.mjs` check needs the attached bridge and a concurrently awaited pump for three requests. It changes app focus and sends Escape; it is excluded from automatic tests.
+Tests cover observation-token replay, coordinate and key restrictions, native map round trips, Unicode labels, preservation of unrelated map data, and refusal to overwrite existing outputs.
 
-## Limits and Next Work
+The real-map tests require the [official sample map](https://github.com/Megasploot/Wonderdraft/blob/master/treasure.wonderdraft_map) at `native/tests/treasure.wonderdraft_map` and skip that coverage if the fixture is absent. The Node integration test creates a new proof map in `maps/`.
 
-Native tools currently edit labels only; symbols, roads, landmasses, rivers, and territories need additional structured operations and tests. Live inputs provide access to those tools through Wonderdraft's UI, but higher-level semantic wrappers and full drawing/export workflows have not been verified. Map-to-window coordinate calibration is not implemented.
+The optional `tests/live-smoke.mjs` check requires an attached live bridge and a concurrent pump for three requests. It observes the app and sends Escape, so it is excluded from the automatic test suite.
 
-Live control is currently specific to an active Codex desktop Computer Use session on Windows. It is not a standalone remote ChatGPT service. No API key or cloud hosting is required. New/restarted Codex sessions may be needed for registered MCP tools to appear; the actual tool catalog must be checked before claiming discovery.
+## Limitations
 
-The plugin manifest and skill are included for packaging. The server was registered directly as a local MCP server; no account plugin upload or public publication was performed. Dependency directories, `.runtime`, build intermediates and official sample maps must be excluded from a redistributed archive.
+- Native editing currently supports labels only. Structured symbol, road, terrain, river, and territory editing is not implemented.
+- Adding a native label requires an existing label to use as a style template.
+- Live control is specific to Windows and an active Codex desktop Computer Use session.
+- Higher-level live drawing/export workflows and map-to-window coordinate calibration are not implemented.
+- The native backend's exclusive file publishing requires a filesystem supporting hard links, such as NTFS.
 
-## Sources
+This is an unofficial experimental integration and is not affiliated with or endorsed by Wonderdraft.
 
-- [Miracledraft Map Helper](https://github.com/Glumbosch/miracledraft_map_helper) — Unlicense parser reference; provenance in `native/NOTICE.txt`.
-- [Official Wonderdraft repository](https://github.com/Megasploot/Wonderdraft) — Official sample map and documentation.
-- [Official MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)
-- [Codex MCP documentation](https://learn.chatgpt.com/docs/extend/mcp)
+## References and attribution
 
-## Related Notes
-
-- [[Wonderdraft MCP Server]]
-- [[REA]]
+- [Miracledraft Map Helper](https://github.com/Glumbosch/miracledraft_map_helper) — Native parser reference. See [provenance](native/NOTICE.txt) and the [third-party license](native/THIRD_PARTY_LICENSE).
+- [Official Wonderdraft repository](https://github.com/Megasploot/Wonderdraft)
+- [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)
